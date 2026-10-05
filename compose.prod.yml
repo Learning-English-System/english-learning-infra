@@ -1,0 +1,240 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: english-learning-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd!2026"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - english_learning_net
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong@Passw0rd!2026' -C -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'YourStrong@Passw0rd!2026' -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: english-learning-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - english_learning_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.8.0
+    container_name: english-learning-kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:29092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: '4L62EnnTTMmnNxqDTvAUSS'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - english_learning_net
+    healthcheck:
+      test: ["CMD-SHELL", "/bin/kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: english-learning-mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - english_learning_net
+
+  auth:
+    build:
+      context: ..
+      dockerfile: src/Auth/Auth.Api/Dockerfile
+    container_name: english-learning-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__AuthDb: "Server=mssql,1433;Database=AuthDb;User Id=sa;Password=YourStrong@Passw0rd!2026;TrustServerCertificate=True"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+      Smtp__Host: "mailpit"
+      Smtp__Port: "1025"
+    ports:
+      - "5001:5001"
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - english_learning_net
+
+  profile:
+    build:
+      context: ..
+      dockerfile: src/Profile/Profile.Api/Dockerfile
+    container_name: english-learning-profile
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__ProfileDb: "Server=mssql,1433;Database=ProfileDb;User Id=sa;Password=YourStrong@Passw0rd!2026;TrustServerCertificate=True"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+    ports:
+      - "5002:5002"
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - english_learning_net
+
+  learning:
+    build:
+      context: ..
+      dockerfile: src/Learning/Learning.Api/Dockerfile
+    container_name: english-learning-learning
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__LearningDb: "Server=mssql,1433;Database=LearningDb;User Id=sa;Password=YourStrong@Passw0rd!2026;TrustServerCertificate=True"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+    ports:
+      - "5003:5003"
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - english_learning_net
+
+  ai:
+    build:
+      context: ..
+      dockerfile: src/Ai/Ai.Api/Dockerfile
+    container_name: english-learning-ai
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      Redis__ConnectionString: "redis:6379"
+    ports:
+      - "5004:5004"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - english_learning_net
+
+  test:
+    build:
+      context: ..
+      dockerfile: src/Test/Test.Api/Dockerfile
+    container_name: english-learning-test
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__TestDb: "Server=mssql,1433;Database=TestDb;User Id=sa;Password=YourStrong@Passw0rd!2026;TrustServerCertificate=True"
+      Redis__ConnectionString: "redis:6379"
+      Kafka__BootstrapServers: "kafka:9092"
+      GrpcClients__LearningServiceUrl: "http://learning:5003"
+      GrpcClients__AiServiceUrl: "http://ai:5004"
+    ports:
+      - "5005:5005"
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      learning:
+        condition: service_started
+      ai:
+        condition: service_started
+    networks:
+      - english_learning_net
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: english-learning-frontend
+    ports:
+      - "3000:3000"
+    networks:
+      - english_learning_net
+
+  gateway:
+    image: nginx:alpine
+    container_name: english-learning-gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "auth:host-gateway"
+      - "profile:host-gateway"
+      - "learning:host-gateway"
+      - "ai:host-gateway"
+      - "test:host-gateway"
+      - "frontend:host-gateway"
+    depends_on:
+      - auth
+      - profile
+      - learning
+      - ai
+      - test
+      - frontend
+    networks:
+      - english_learning_net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+networks:
+  english_learning_net:
+    name: english_learning_net
+    driver: bridge
+
+volumes:
+  mssql_data:
+  redis_data:
+  kafka_data:
