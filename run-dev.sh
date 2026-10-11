@@ -11,10 +11,10 @@ echo "============================================================"
 
 # 1. Start Docker Infrastructure & Gateway
 echo "1. Checking Docker infrastructure & API Gateway..."
-docker compose -f "$COMPOSE_FILE" up -d
+docker compose -p deploy -f "$COMPOSE_FILE" up -d
 
 echo "2. Waiting for SQL Server & Redis to become healthy..."
-docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli ping >/dev/null 2>&1 || sleep 3
+docker compose -p deploy -f "$COMPOSE_FILE" exec -T redis redis-cli ping >/dev/null 2>&1 || sleep 3
 
 # Array to store child process PIDs
 PIDS=()
@@ -54,30 +54,32 @@ fi
 
 # 3. Start Backend Services
 echo "3. Starting backend microservices..."
+LOGS_DIR="$DIR/logs"
+mkdir -p "$LOGS_DIR"
 
 echo "   -> Starting Auth Service (HTTP 5001)..."
-dotnet run --project "$AUTH_PROJECT" --urls "http://0.0.0.0:5001" >/dev/null 2>&1 &
+dotnet run --project "$AUTH_PROJECT" --urls "http://0.0.0.0:5001" > "$LOGS_DIR/auth.log" 2>&1 &
 PIDS+=($!)
 
 echo "   -> Starting Profile Service (HTTP 5002)..."
-dotnet run --project "$PROFILE_PROJECT" --urls "http://0.0.0.0:5002" >/dev/null 2>&1 &
+dotnet run --project "$PROFILE_PROJECT" --urls "http://0.0.0.0:5002" > "$LOGS_DIR/profile.log" 2>&1 &
 PIDS+=($!)
 
 echo "   -> Starting Learning Service (HTTP 5003)..."
-dotnet run --project "$LEARNING_PROJECT" --urls "http://0.0.0.0:5003" >/dev/null 2>&1 &
+dotnet run --project "$LEARNING_PROJECT" --urls "http://0.0.0.0:5003" > "$LOGS_DIR/learning.log" 2>&1 &
 PIDS+=($!)
 
 echo "   -> Starting AI Service (HTTP 5004)..."
-dotnet run --project "$AI_PROJECT" --urls "http://0.0.0.0:5004" >/dev/null 2>&1 &
+dotnet run --project "$AI_PROJECT" --urls "http://0.0.0.0:5004" > "$LOGS_DIR/ai.log" 2>&1 &
 PIDS+=($!)
 
 echo "   -> Starting Test Service (HTTP 5005)..."
-dotnet run --project "$TEST_PROJECT" --urls "http://0.0.0.0:5005" >/dev/null 2>&1 &
+dotnet run --project "$TEST_PROJECT" --urls "http://0.0.0.0:5005" > "$LOGS_DIR/test.log" 2>&1 &
 PIDS+=($!)
 
 # 4. Start Frontend
 echo "4. Starting React Frontend (HTTP 3000)..."
-(cd "$FRONTEND_DIR" && npm run dev -- --port 3000 --host 0.0.0.0) >/dev/null 2>&1 &
+(cd "$FRONTEND_DIR" && npm run dev -- --port 3000 --host 0.0.0.0) > "$LOGS_DIR/frontend.log" 2>&1 &
 PIDS+=($!)
 
 echo ""
