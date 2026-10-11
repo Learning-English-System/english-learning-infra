@@ -5,6 +5,19 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(cd "$DIR/.." >/dev/null 2>&1 && pwd)"
 COMPOSE_FILE="$DIR/compose.dev.yml"
 
+# Load .env if present
+if [ -f "$ROOT_DIR/.env" ]; then
+    echo "Loading environment variables from $ROOT_DIR/.env..."
+    set -a
+    source "$ROOT_DIR/.env"
+    set +a
+elif [ -f "$DIR/.env" ]; then
+    echo "Loading environment variables from $DIR/.env..."
+    set -a
+    source "$DIR/.env"
+    set +a
+fi
+
 echo "============================================================"
 echo " Starting English Learning Microservices System"
 echo "============================================================"
